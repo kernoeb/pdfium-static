@@ -126,7 +126,9 @@ jobs:
               -framework CoreText -framework Foundation -framework ImageIO
             ./test_pdfium
           else
-            gcc test_pdfium.c -o test_pdfium "$LIB_PATH" -lstdc++ -lm -lpthread -ldl
+            # Use Chromium's clang to link (system ld can't handle .eh_frame from Chromium's clang)
+            pdfium-src/pdfium/third_party/llvm-build/Release+Asserts/bin/clang \
+              test_pdfium.c -o test_pdfium "$LIB_PATH" -lstdc++ -lm -lpthread -ldl
             ./test_pdfium
           fi
 
