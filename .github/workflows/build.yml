@@ -120,7 +120,8 @@ jobs:
           echo "Library size: $(wc -c < "$LIB_PATH") bytes"
 
           if [ "${{ matrix.target_os }}" = "win" ]; then
-            dumpbin //symbols "$LIB_PATH" | grep FPDF_InitLibrary || { echo "ERROR: symbol not found"; exit 1; }
+            DUMPBIN=$(find "/c/Program Files/Microsoft Visual Studio" -name dumpbin.exe -path "*/Hostx64/x64/*" 2>/dev/null | head -1)
+            "$DUMPBIN" //symbols "$LIB_PATH" | grep FPDF_InitLibrary || { echo "ERROR: symbol not found"; exit 1; }
           else
             nm "$LIB_PATH" | grep "T _\?FPDF_InitLibrary$" || { echo "ERROR: symbol not found"; exit 1; }
           fi
