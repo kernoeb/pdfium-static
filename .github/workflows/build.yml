@@ -91,23 +91,25 @@ jobs:
         shell: bash
         working-directory: pdfium-src/pdfium
         run: |
-          GN_ARGS='
-            is_debug = false
-            is_component_build = false
-            pdf_is_standalone = true
-            pdf_is_complete_lib = true
-            pdf_enable_xfa = false
-            pdf_enable_v8 = false
-            pdf_use_partition_alloc = false
-            use_custom_libcxx = false
-            treat_warnings_as_errors = false
-            clang_use_chrome_plugins = false
-            symbol_level = 0
-            target_os = "${{ matrix.target_os }}"
-            target_cpu = "${{ matrix.target_cpu }}"
-            ${{ matrix.extra_args }}
-          '
-          gn gen out/Default --args="$GN_ARGS"
+          mkdir -p out/Default
+          cat > out/Default/args.gn << 'ARGS'
+          is_debug = false
+          is_component_build = false
+          pdf_is_standalone = true
+          pdf_is_complete_lib = true
+          pdf_enable_xfa = false
+          pdf_enable_v8 = false
+          pdf_use_partition_alloc = false
+          use_custom_libcxx = false
+          treat_warnings_as_errors = false
+          clang_use_chrome_plugins = false
+          symbol_level = 0
+          target_os = "${{ matrix.target_os }}"
+          target_cpu = "${{ matrix.target_cpu }}"
+          ${{ matrix.extra_args }}
+          ARGS
+          cat out/Default/args.gn
+          gn gen out/Default
           ninja -C out/Default pdfium
 
       - name: Verify static library
