@@ -23,7 +23,7 @@ jobs:
             target_cpu: arm64
             artifact_name: libpdfium-macos-arm64
             lib_file: out/Default/obj/libpdfium.a
-            extra_args: "use_custom_libcxx = false"
+            extra_args: ""
           - os: ubuntu-22.04
             target_os: linux
             target_cpu: x64
@@ -57,6 +57,10 @@ jobs:
           SDK_BIN="/c/Program Files (x86)/Windows Kits/10/bin"
           SDK_VERSION=$(ls "$SDK_BIN" | grep '^10\.' | sort -V | tail -1)
           echo "$SDK_BIN/$SDK_VERSION/x64" >> $GITHUB_PATH
+
+      - name: Select Xcode 16.0 (macOS)
+        if: matrix.target_os == 'mac'
+        run: sudo xcode-select -s /Applications/Xcode_16.app/Contents/Developer
 
       - name: Install Linux build deps
         if: matrix.target_os == 'linux'
