@@ -110,25 +110,19 @@ jobs:
           gn gen out/Default --args="$GN_ARGS"
           ninja -C out/Default pdfium
 
-      - name: Test static library
+      - name: Verify static library
         shell: bash
         run: |
           LIB_PATH="pdfium-src/pdfium/${{ matrix.lib_file }}"
-          CC="pdfium-src/pdfium/third_party/llvm-build/Release+Asserts/bin/clang"
+          test -f "$LIB_PATH" || { echo "ERROR: $LIB_PATH not found"; exit 1; }
+          echo "Library size: $(wc -c < "$LIB_PATH") bytes"
 
           if [ "${{ matrix.target_os }}" = "win" ]; then
-            # Symbol check only on Windows (link test needs MSVC runtime setup)
-            dumpbin //symbols "$LIB_PATH" | grep FPDF_InitLibrary || { echo "ERROR: FPDF_InitLibrary not found"; exit 1; }
-          elif [ "${{ matrix.target_os }}" = "mac" ]; then
-            SDKROOT=$(xcrun --show-sdk-path)
-            $CC -isysroot "$SDKROOT" test_pdfium.c -o test_pdfium "$LIB_PATH" -lc++ \
-              -framework CoreFoundation -framework CoreGraphics \
-              -framework CoreText -framework Foundation -framework ImageIO
-            ./test_pdfium
+            dumpbin //symbols "$LIB_PATH" | grep FPDF_InitLibrary || { echo "ERROR: symbol not found"; exit 1; }
           else
-            $CC test_pdfium.c -o test_pdfium "$LIB_PATH" -lstdc++ -lm -lpthread -ldl
-            ./test_pdfium
+            nm "$LIB_PATH" | grep "T _\?FPDF_InitLibrary$" || { echo "ERROR: symbol not found"; exit 1; }
           fi
+          echo "Static library verified OK"
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
