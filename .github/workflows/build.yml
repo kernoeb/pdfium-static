@@ -123,7 +123,7 @@ jobs:
               -framework CoreText -framework Foundation -framework ImageIO
             ./test_pdfium
           else
-            g++ test_pdfium.c -o test_pdfium "$LIB_PATH" -lstdc++ -lm -lpthread -ldl
+            gcc test_pdfium.c -o test_pdfium "$LIB_PATH" -lstdc++ -lm -lpthread -ldl
             ./test_pdfium
           fi
 
