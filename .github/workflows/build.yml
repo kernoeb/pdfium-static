@@ -1,0 +1,180 @@
+name: Build PDFium
+
+on:
+  workflow_dispatch:
+    inputs:
+      pdfium_branch:
+        description: 'PDFium chromium branch number'
+        required: true
+        default: '7543'
+
+env:
+  DEPOT_TOOLS_WIN_TOOLCHAIN: 0
+  PDFIUM_BRANCH: ${{ inputs.pdfium_branch }}
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-14
+            target_os: mac
+            target_cpu: arm64
+            artifact_name: libpdfium-macos-arm64
+            lib_file: out/Default/obj/libpdfium.a
+            extra_args: ""
+          - os: ubuntu-22.04
+            target_os: linux
+            target_cpu: x64
+            artifact_name: libpdfium-linux-x64
+            lib_file: out/Default/obj/libpdfium.a
+            extra_args: "use_sysroot = false"
+          - os: windows-2025
+            target_os: win
+            target_cpu: x64
+            artifact_name: pdfium-windows-x64
+            lib_file: out/Default/obj/pdfium.lib
+            extra_args: ""
+
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 180
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install depot_tools
+        shell: bash
+        run: |
+          git clone --depth 1 https://chromium.googlesource.com/chromium/tools/depot_tools.git $HOME/depot_tools
+          echo "$HOME/depot_tools" >> $GITHUB_PATH
+
+      - name: Add Windows SDK to PATH
+        if: matrix.target_os == 'win'
+        shell: bash
+        run: |
+          # rc.exe is needed by the build but not in PATH by default
+          SDK_BIN="/c/Program Files (x86)/Windows Kits/10/bin"
+          SDK_VERSION=$(ls "$SDK_BIN" | grep '^10\.' | sort -V | tail -1)
+          echo "$SDK_BIN/$SDK_VERSION/x64" >> $GITHUB_PATH
+
+      - name: Install Linux build deps
+        if: matrix.target_os == 'linux'
+        run: sudo apt-get update && sudo apt-get install -y build-essential
+
+      - name: Fetch PDFium
+        shell: bash
+        run: |
+          mkdir pdfium-src && cd pdfium-src
+          gclient config --unmanaged https://pdfium.googlesource.com/pdfium.git
+          gclient sync -r origin/chromium/${{ env.PDFIUM_BRANCH }} --no-history --shallow
+
+      - name: Install sysroot (Linux)
+        if: matrix.target_os == 'linux'
+        working-directory: pdfium-src/pdfium
+        run: ./build/install-build-deps.sh --no-prompt --unsupported
+
+      - name: Patch Windows resource compiler
+        if: matrix.target_os == 'win'
+        shell: bash
+        working-directory: pdfium-src/pdfium
+        run: |
+          # Replace the Python rc wrapper with a direct rc.exe call
+          # (the wrapper doesn't work outside the Chrome infra)
+          sed -i.bak 's|"$python_path"|"rc.exe"|g' build/toolchain/win/toolchain.gni 2>/dev/null || true
+
+      - name: Configure and build
+        shell: bash
+        working-directory: pdfium-src/pdfium
+        run: |
+          GN_ARGS='
+            is_debug = false
+            is_component_build = false
+            pdf_is_standalone = true
+            pdf_is_complete_lib = true
+            pdf_enable_xfa = false
+            pdf_enable_v8 = false
+            pdf_use_partition_alloc = false
+            use_goma = false
+            use_custom_libcxx = false
+            treat_warnings_as_errors = false
+            clang_use_chrome_plugins = false
+            symbol_level = 0
+            target_os = "${{ matrix.target_os }}"
+            target_cpu = "${{ matrix.target_cpu }}"
+            ${{ matrix.extra_args }}
+          '
+          gn gen out/Default --args="$GN_ARGS"
+          ninja -C out/Default pdfium
+
+      - name: Test static library
+        shell: bash
+        run: |
+          LIB_PATH="pdfium-src/pdfium/${{ matrix.lib_file }}"
+          INCLUDE_PATH="pdfium-src/pdfium/public"
+
+          if [ "${{ matrix.target_os }}" = "win" ]; then
+            # Use clang-cl on Windows (available via depot_tools/LLVM)
+            clang -c test_pdfium.c -o test_pdfium.o -I "$INCLUDE_PATH"
+            lld-link test_pdfium.o "$LIB_PATH" /out:test_pdfium.exe /defaultlib:libcmt
+            ./test_pdfium.exe
+          elif [ "${{ matrix.target_os }}" = "mac" ]; then
+            clang test_pdfium.c -o test_pdfium "$LIB_PATH" -lc++ \
+              -framework CoreFoundation -framework CoreGraphics \
+              -framework CoreText -framework Foundation -framework ImageIO
+            ./test_pdfium
+          else
+            g++ test_pdfium.c -o test_pdfium "$LIB_PATH" -lstdc++ -lm -lpthread -ldl
+            ./test_pdfium
+          fi
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact_name }}
+          path: pdfium-src/pdfium/${{ matrix.lib_file }}
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Prepare release files
+        run: |
+          mkdir release
+          for dir in artifacts/*/; do
+            name=$(basename "$dir")
+            file=$(find "$dir" -type f | head -1)
+            ext="${file##*.}"
+            cp "$file" "release/${name}.${ext}"
+          done
+          ls -la release/
+
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: chromium/${{ env.PDFIUM_BRANCH }}
+          name: "chromium/${{ env.PDFIUM_BRANCH }}"
+          body: |
+            Static PDFium libraries built from `chromium/${{ env.PDFIUM_BRANCH }}`.
+
+            ### Usage with pdfium-render
+
+            Match the `pdfium_XXXX` feature flag in `pdfium-render` to this branch number.
+
+            ### Files
+
+            | File | Platform |
+            |------|----------|
+            | `libpdfium-macos-arm64.a` | macOS ARM64 (Apple Silicon) |
+            | `libpdfium-linux-x64.a` | Linux x86_64 |
+            | `pdfium-windows-x64.lib` | Windows x86_64 |
+          files: release/*
+          make_latest: true
