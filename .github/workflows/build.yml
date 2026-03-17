@@ -18,12 +18,12 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - os: macos-14
+          - os: macos-15
             target_os: mac
             target_cpu: arm64
             artifact_name: libpdfium-macos-arm64
             lib_file: out/Default/obj/libpdfium.a
-            extra_args: "use_custom_libcxx = true"
+            extra_args: ""
           - os: ubuntu-22.04
             target_os: linux
             target_cpu: x64
