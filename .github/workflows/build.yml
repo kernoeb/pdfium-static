@@ -120,7 +120,8 @@ jobs:
             # Symbol check only on Windows (link test needs MSVC runtime setup)
             dumpbin //symbols "$LIB_PATH" | grep FPDF_InitLibrary || { echo "ERROR: FPDF_InitLibrary not found"; exit 1; }
           elif [ "${{ matrix.target_os }}" = "mac" ]; then
-            $CC test_pdfium.c -o test_pdfium "$LIB_PATH" -lc++ \
+            SDKROOT=$(xcrun --show-sdk-path)
+            $CC -isysroot "$SDKROOT" test_pdfium.c -o test_pdfium "$LIB_PATH" -lc++ \
               -framework CoreFoundation -framework CoreGraphics \
               -framework CoreText -framework Foundation -framework ImageIO
             ./test_pdfium
