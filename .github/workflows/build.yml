@@ -23,7 +23,7 @@ jobs:
             target_cpu: arm64
             artifact_name: libpdfium-macos-arm64
             lib_file: out/Default/obj/libpdfium.a
-            extra_args: ""
+            extra_args: "use_custom_libcxx = true"
           - os: ubuntu-22.04
             target_os: linux
             target_cpu: x64
@@ -95,7 +95,6 @@ jobs:
             pdf_enable_xfa = false
             pdf_enable_v8 = false
             pdf_use_partition_alloc = false
-            use_goma = false
             use_custom_libcxx = false
             treat_warnings_as_errors = false
             clang_use_chrome_plugins = false
