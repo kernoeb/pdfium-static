@@ -99,6 +99,7 @@ jobs:
             pdf_enable_xfa = false
             pdf_enable_v8 = false
             pdf_use_partition_alloc = false
+            use_custom_libcxx = false
             treat_warnings_as_errors = false
             clang_use_chrome_plugins = false
             symbol_level = 0
@@ -109,24 +110,24 @@ jobs:
           gn gen out/Default --args="$GN_ARGS"
           ninja -C out/Default pdfium
 
-      - name: Verify static library
+      - name: Test static library
         shell: bash
         run: |
           LIB_PATH="pdfium-src/pdfium/${{ matrix.lib_file }}"
+          CC="pdfium-src/pdfium/third_party/llvm-build/Release+Asserts/bin/clang"
 
-          # Check file exists and is not empty
-          test -f "$LIB_PATH" || { echo "ERROR: $LIB_PATH not found"; exit 1; }
-          SIZE=$(wc -c < "$LIB_PATH")
-          echo "Library size: $SIZE bytes"
-          test "$SIZE" -gt 1000000 || { echo "ERROR: library too small ($SIZE bytes)"; exit 1; }
-
-          # Check key PDFium symbols are present
           if [ "${{ matrix.target_os }}" = "win" ]; then
+            # Symbol check only on Windows (link test needs MSVC runtime setup)
             dumpbin //symbols "$LIB_PATH" | grep FPDF_InitLibrary || { echo "ERROR: FPDF_InitLibrary not found"; exit 1; }
+          elif [ "${{ matrix.target_os }}" = "mac" ]; then
+            $CC test_pdfium.c -o test_pdfium "$LIB_PATH" -lc++ \
+              -framework CoreFoundation -framework CoreGraphics \
+              -framework CoreText -framework Foundation -framework ImageIO
+            ./test_pdfium
           else
-            nm "$LIB_PATH" | grep "T _FPDF_InitLibrary" || { echo "ERROR: FPDF_InitLibrary not found"; exit 1; }
+            $CC test_pdfium.c -o test_pdfium "$LIB_PATH" -lstdc++ -lm -lpthread -ldl
+            ./test_pdfium
           fi
-          echo "Static library OK"
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
