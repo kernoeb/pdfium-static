@@ -1,6 +1,6 @@
 # pdfium-static
 
-Static PDFium libraries for macOS, Linux and Windows.
+Static PDFium libraries for macOS, Linux, Windows and WebAssembly.
 
 Built from [pdfium.googlesource.com](https://pdfium.googlesource.com/pdfium/) via GitHub Actions.
 
@@ -35,3 +35,5 @@ Libraries are built with:
 - No XFA support
 - Complete static library (`pdf_is_complete_lib = true`)
 - Release mode, no debug symbols
+
+The WASM build additionally patches PDFium's build system to support Emscripten as a target (see `scripts/patch-wasm.py`).
