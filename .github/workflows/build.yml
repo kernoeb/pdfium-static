@@ -11,6 +11,7 @@ on:
 env:
   DEPOT_TOOLS_WIN_TOOLCHAIN: 0
   PDFIUM_BRANCH: ${{ inputs.pdfium_branch }}
+  EMSDK_VERSION: '4.0.23'
 
 jobs:
   build:
@@ -36,12 +37,28 @@ jobs:
             artifact_name: pdfium-windows-x64
             lib_file: out/Default/obj/pdfium.lib
             extra_args: ""
+          - os: ubuntu-22.04
+            target_os: emscripten
+            target_cpu: wasm
+            artifact_name: libpdfium-wasm
+            lib_file: out/Default/obj/libpdfium.a
+            extra_args: "is_clang = false"
 
     runs-on: ${{ matrix.os }}
     timeout-minutes: 180
 
     steps:
       - uses: actions/checkout@v6
+
+      - name: Install Emscripten SDK
+        if: matrix.target_os == 'emscripten'
+        run: |
+          git clone --depth 1 https://github.com/emscripten-core/emsdk.git $HOME/emsdk
+          $HOME/emsdk/emsdk install ${{ env.EMSDK_VERSION }}
+          $HOME/emsdk/emsdk activate ${{ env.EMSDK_VERSION }}
+          echo "$HOME/emsdk" >> $GITHUB_PATH
+          echo "$HOME/emsdk/upstream/emscripten" >> $GITHUB_PATH
+          echo "EMSDK=$HOME/emsdk" >> $GITHUB_ENV
 
       - name: Install depot_tools
         shell: bash
@@ -53,7 +70,6 @@ jobs:
         if: matrix.target_os == 'win'
         shell: bash
         run: |
-          # rc.exe is needed by the build but not in PATH by default
           SDK_BIN="/c/Program Files (x86)/Windows Kits/10/bin"
           SDK_VERSION=$(ls "$SDK_BIN" | grep '^10\.' | sort -V | tail -1)
           echo "$SDK_BIN/$SDK_VERSION/x64" >> $GITHUB_PATH
@@ -82,10 +98,12 @@ jobs:
         if: matrix.target_os == 'win'
         shell: bash
         working-directory: pdfium-src/pdfium
-        run: |
-          # Replace the Python rc wrapper with a direct rc.exe call
-          # (the wrapper doesn't work outside the Chrome infra)
-          sed -i.bak 's|"$python_path"|"rc.exe"|g' build/toolchain/win/toolchain.gni 2>/dev/null || true
+        run: sed -i.bak 's|"$python_path"|"rc.exe"|g' build/toolchain/win/toolchain.gni 2>/dev/null || true
+
+      - name: Patch PDFium for WASM
+        if: matrix.target_os == 'emscripten'
+        working-directory: pdfium-src/pdfium
+        run: python3 $GITHUB_WORKSPACE/scripts/patch-wasm.py
 
       - name: Configure and build
         shell: bash
@@ -113,19 +131,14 @@ jobs:
           ninja -C out/Default pdfium
 
       - name: Verify static library
+        if: matrix.target_os != 'emscripten'
         shell: bash
-        run: |
-          LIB_PATH="pdfium-src/pdfium/${{ matrix.lib_file }}"
-          test -f "$LIB_PATH" || { echo "ERROR: $LIB_PATH not found"; exit 1; }
-          echo "Library size: $(wc -c < "$LIB_PATH") bytes"
+        run: $GITHUB_WORKSPACE/scripts/verify-native.sh "pdfium-src/pdfium/${{ matrix.lib_file }}" "${{ matrix.target_os }}"
 
-          if [ "${{ matrix.target_os }}" = "win" ]; then
-            DUMPBIN=$(find "/c/Program Files/Microsoft Visual Studio" -name dumpbin.exe -path "*/Hostx64/x64/*" 2>/dev/null | head -1)
-            "$DUMPBIN" //symbols "$LIB_PATH" | grep FPDF_InitLibrary || { echo "ERROR: symbol not found"; exit 1; }
-          else
-            nm "$LIB_PATH" | grep "T _\?FPDF_InitLibrary$" || { echo "ERROR: symbol not found"; exit 1; }
-          fi
-          echo "Static library verified OK"
+      - name: Test WASM with emcc
+        if: matrix.target_os == 'emscripten'
+        working-directory: pdfium-src/pdfium
+        run: $GITHUB_WORKSPACE/scripts/test-wasm.sh out/Default/obj/libpdfium.a
 
       - name: Upload artifact
         uses: actions/upload-artifact@v7
@@ -175,5 +188,6 @@ jobs:
             | `libpdfium-macos-arm64.a` | macOS ARM64 (Apple Silicon) |
             | `libpdfium-linux-x64.a` | Linux x86_64 |
             | `pdfium-windows-x64.lib` | Windows x86_64 |
+            | `libpdfium-wasm.a` | WebAssembly (Emscripten) |
           files: release/*
           make_latest: true
