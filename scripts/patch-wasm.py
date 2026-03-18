@@ -42,11 +42,13 @@ patch_re(
     '} else if (target_os == "emscripten") {\n  _default_toolchain = "//build/toolchain/wasm:$target_cpu"\n} else {',
 )
 
-# 2. Add wasm compiler config after mac
-patch(
+# 2. Add wasm compiler config at end of platform compiler chain
+#    The chain is: is_win / is_android / is_chromeos / is_linux / is_mac / is_ios / is_fuchsia
+#    We insert before the final closing }
+patch_re(
     "build/config/compiler/BUILD.gn",
-    'configs += [ "//build/config/mac:compiler" ]\n    }',
-    'configs += [ "//build/config/mac:compiler" ]\n    } else if (current_os == "emscripten") {\n      configs += [ "//build/config/wasm:compiler" ]\n    }',
+    r'(configs \+= \[ "//build/config/fuchsia:compiler" \]\n\s*\})',
+    r'\1 else if (current_os == "emscripten") {\n      configs += [ "//build/config/wasm:compiler" ]\n    }',
 )
 
 # 3. Disable stack protector for emscripten
