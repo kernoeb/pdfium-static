@@ -15,7 +15,7 @@ Each release is tagged with the chromium branch number (e.g. `chromium/7543`).
 1. Go to **Actions** > **Build PDFium**
 2. Click **Run workflow**
 3. Enter the chromium branch number (e.g. `7543`)
-4. Wait ~1-2h for the build to complete
+4. Wait ~15min for the build to complete
 5. A release is created automatically with the static libraries
 
 ## Usage with pdfium-render (Rust)
