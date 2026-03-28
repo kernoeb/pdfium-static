@@ -1,0 +1,55 @@
+name: Check PDFium updates
+
+on:
+  schedule:
+    # Every Monday at 08:00 UTC
+    - cron: '0 8 * * 1'
+  workflow_dispatch: # Allow manual trigger
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Get latest PDFium branch
+        id: latest
+        run: |
+          branch=$(./scripts/check-latest-pdfium.sh)
+          echo "branch=$branch" >> "$GITHUB_OUTPUT"
+          echo "Latest PDFium branch: $branch"
+
+      - name: Get current release
+        id: current
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # Get the latest release tag (format: chromium/XXXX)
+          tag=$(gh release view --json tagName -q .tagName 2>/dev/null || echo "")
+          current=$(echo "$tag" | sed 's|chromium/||')
+          echo "current=$current" >> "$GITHUB_OUTPUT"
+          echo "Current release: ${current:-none}"
+
+      - name: Compare and trigger build
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          latest=${{ steps.latest.outputs.branch }}
+          current=${{ steps.current.outputs.current }}
+
+          if [ -z "$current" ]; then
+            echo "No existing release found, triggering build for chromium/$latest"
+            gh workflow run build.yml -f pdfium_branch="$latest"
+            exit 0
+          fi
+
+          if [ "$latest" -gt "$current" ] 2>/dev/null; then
+            echo "New version available: $latest (current: $current)"
+            gh workflow run build.yml -f pdfium_branch="$latest"
+            echo "Build triggered for chromium/$latest"
+          else
+            echo "Already up to date at chromium/$current (upstream: $latest)"
+          fi
