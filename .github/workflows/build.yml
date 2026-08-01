@@ -100,6 +100,11 @@ jobs:
         working-directory: pdfium-src/pdfium
         run: sed -i.bak 's|"$python_path"|"rc.exe"|g' build/toolchain/win/toolchain.gni 2>/dev/null || true
 
+      - name: Patch PDFium for Windows
+        if: matrix.target_os == 'win'
+        working-directory: pdfium-src/pdfium
+        run: python3 $env:GITHUB_WORKSPACE/scripts/patch-win.py
+
       - name: Patch PDFium for WASM
         if: matrix.target_os == 'emscripten'
         working-directory: pdfium-src/pdfium
