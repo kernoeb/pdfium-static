@@ -39,3 +39,11 @@ patch(
     '  deps += [ "//buildtools/third_party/libc++" ]\n\n'
     '  public_deps = [\n    ":pdfium_public_headers_impl",\n',
 )
+
+# With clang, Highway stores float16 as _Float16, whose conversions call
+# __extendhfsf2. libgcc has it only from GCC 12, so use Highway's software path.
+patch(
+    "third_party/highway/BUILD.gn",
+    '  include_dirs = [ "src" ]\n  defines = []\n',
+    '  include_dirs = [ "src" ]\n  defines = [ "HWY_HAVE_SCALAR_F16_TYPE=0" ]\n',
+)
